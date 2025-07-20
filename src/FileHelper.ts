@@ -1,10 +1,3 @@
-// Plan:
-// - Accept vault, file, and date as parameters
-// - Build a year/month folder path
-// - Create the folder if it doesn't exist
-// - Move the file to the new path
-// - Return the new path
-
 import { TFile, Vault } from "obsidian";
 
 export async function moveToArchiveFolder(
