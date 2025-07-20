@@ -1,4 +1,4 @@
-export interface PluginSettings {
+export interface VaeSettings {
 	peopleFolder: string;
 	personTemplate: string;
 	projectFolder: string;
@@ -10,7 +10,7 @@ export interface PluginSettings {
 	todoFolder: string;
 }
 
-export const DEFAULT_SETTINGS: PluginSettings = {
+export const DEFAULT_SETTINGS: VaeSettings = {
 	peopleFolder: "/My Knowledge/People",
 	personTemplate: "/Vae/System/Templates/People Template.md",
 	projectFolder: "/My Projects",

@@ -1,68 +1,61 @@
-import { TFile, TFolder, Vault, normalizePath } from "obsidian";
+import VaePlugin from "main";
+import { TFile, TFolder, normalizePath } from "obsidian";
 import { FileHelper } from "./FileHelper";
 
-export interface ProjectModuleOptions {
-	vault: Vault;
-	projectFolder?: string;
-	projectTemplate?: string;
-	logger?: (msg: string) => void;
-}
-
 export class ProjectModule {
-	private vault: Vault;
+	private plugin: VaePlugin;
 	private projectFolder: string;
 	private projectTemplate?: string;
-	private logger: (msg: string) => void;
 
-	constructor(options: ProjectModuleOptions) {
-		this.vault = options.vault;
-		this.projectFolder = options.projectFolder || "/My Projects";
-		this.projectTemplate = options.projectTemplate;
-		this.logger = options.logger || (() => {});
+	constructor(plugin: VaePlugin) {
+		this.plugin = plugin;
+		this.projectFolder = plugin.settings?.projectFolder || "/My Projects";
+		this.projectTemplate = plugin.settings?.projectTemplate;
+
+		// Example: Register a command and ribbon icon for quick processing
+		this.plugin.addCommand({
+			id: "process-active-project-note",
+			name: "Process Active Project Note",
+			callback: () => this.processActiveProjectNote(),
+		});
+		this.plugin.addRibbonIcon(
+			"briefcase",
+			"Process Active Project Note",
+			() => this.processActiveProjectNote()
+		);
 	}
 
-	// Sanitizes project name for use as folder name
-	private sanitizeProjectName(name: string): string {
-		return name
-			.replace(/[<>:"/\\|?*]/g, "") // Remove invalid file system characters
-			.replace(/\s+/g, " ") // Normalize whitespace
-			.trim();
-	}
-
-	// Ensures the projects folder exists, creates if missing
-	async ensureFolder(): Promise<TFolder> {
+	// Original API: create a new project folder structure and note
+	public async createProject(
+		name: string
+	): Promise<{ projectFile: TFile; projectFolder: TFolder }> {
+		const vault = this.plugin.app.vault;
+		// Ensure projects folder exists
 		const folderPath = normalizePath(this.projectFolder);
-		let folder = this.vault.getAbstractFileByPath(folderPath);
+		let folder = vault.getAbstractFileByPath(folderPath);
 		if (!folder) {
-			this.logger(`Creating folder: ${folderPath}`);
-			folder = await this.vault.createFolder(folderPath);
+			folder = await vault.createFolder(folderPath);
 		}
 		if (!(folder instanceof TFolder)) {
 			throw new Error(`Path exists but is not a folder: ${folderPath}`);
 		}
-		return folder;
-	}
 
-	// Creates a new project folder structure and note
-	async createProject(
-		name: string
-	): Promise<{ projectFile: TFile; projectFolder: TFolder }> {
-		await this.ensureFolder();
-
-		const sanitizedName = this.sanitizeProjectName(name);
+		// Sanitize project name
+		const sanitizedName = name
+			.replace(/[<>:"/\\|?*]/g, "")
+			.replace(/\s+/g, " ")
+			.trim();
 		const projectFolderPath = normalizePath(
 			`${this.projectFolder}/${sanitizedName}`
 		);
-
 		const projectNotePath = normalizePath(
 			`${projectFolderPath}/${sanitizedName}.md`
 		);
 
 		// Create project folder
-		let projectFolder = this.vault.getAbstractFileByPath(projectFolderPath);
+		let projectFolder = vault.getAbstractFileByPath(projectFolderPath);
 		if (!projectFolder) {
-			this.logger(`Creating project folder: ${projectFolderPath}`);
-			projectFolder = await this.vault.createFolder(projectFolderPath);
+			projectFolder = await vault.createFolder(projectFolderPath);
 		}
 		if (!(projectFolder instanceof TFolder)) {
 			throw new Error(
@@ -70,50 +63,62 @@ export class ProjectModule {
 			);
 		}
 
-		// Create Subfolders
+		// Create subfolders
 		await FileHelper.createFolderIfNotExists(
 			normalizePath(`${projectFolderPath}/Notes`),
-			this.vault
+			vault
 		);
 		await FileHelper.createFolderIfNotExists(
 			normalizePath(`${projectFolderPath}/Tasks`),
-			this.vault
+			vault
 		);
 
 		// Create project note from template
 		let content = `# ${name}\n`;
 		if (this.projectTemplate) {
-			const templateFile = this.vault.getAbstractFileByPath(
+			const templateFile = vault.getAbstractFileByPath(
 				this.projectTemplate
 			);
 			if (templateFile instanceof TFile) {
-				content = await this.vault.read(templateFile);
+				content = await vault.read(templateFile);
 				content = content.replace(/\{\{name\}\}/g, name);
-			} else {
-				this.logger(
-					`Template not found: ${this.projectTemplate}, using default content.`
-				);
 			}
 		}
-
-		this.logger(`Creating project note: ${projectNotePath}`);
-		const projectFile = await this.vault.create(projectNotePath, content);
-
+		const projectFile = await vault.create(projectNotePath, content);
 		return { projectFile, projectFolder: projectFolder as TFolder };
 	}
 
-	// Get list of all project folders for selection
-	async getProjectFolders(): Promise<string[]> {
-		await this.ensureFolder();
-		const projectsFolder = this.vault.getAbstractFileByPath(
+	// Original API: get list of all project folders for selection
+	public async getProjectFolders(): Promise<string[]> {
+		const vault = this.plugin.app.vault;
+		const projectsFolder = vault.getAbstractFileByPath(
 			normalizePath(this.projectFolder)
 		);
 		if (!(projectsFolder instanceof TFolder)) {
 			return [];
 		}
-
 		return projectsFolder.children
 			.filter((child) => child instanceof TFolder)
 			.map((folder) => folder.name);
+	}
+
+	// Example: process the active file as a project note (for command/ribbon)
+	public async processActiveProjectNote() {
+		const { workspace, vault } = this.plugin.app;
+		const file = workspace.getActiveFile();
+		if (!file) return;
+
+		const now = new Date();
+		const isoNow = now.toISOString();
+		await this.plugin.app.fileManager.processFrontMatter(file, (fm) => {
+			fm["project-status"] = "processed";
+			fm["processed"] = isoNow;
+		});
+
+		const content = await vault.read(file);
+		const cleaned = content.replace(/```meta-bind-button[\s\S]*?```/, "");
+		await vault.modify(file, cleaned);
+
+		await FileHelper.moveToArchiveFolder(vault, file, now);
 	}
 }

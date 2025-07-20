@@ -1,53 +1,47 @@
-import { TFile, TFolder, Vault, normalizePath } from "obsidian";
-import { TemplaterHelper } from "./TemplaterHelper";
-
-export interface PersonModuleOptions {
-	vault: Vault;
-	peopleFolder?: string;
-	personTemplate?: string;
-	templaterHelper?: TemplaterHelper;
-	logger?: (msg: string) => void;
-}
+import VaePlugin from "main";
+import { TFile, TFolder, normalizePath } from "obsidian";
+import { FileHelper } from "./FileHelper";
 
 export class PersonModule {
-	private vault: Vault;
+	private plugin: VaePlugin;
 	private peopleFolder: string;
 	private personTemplate?: string;
-	private templaterHelper?: TemplaterHelper;
-	private logger: (msg: string) => void;
 
-	constructor(options: PersonModuleOptions) {
-		this.vault = options.vault;
-		this.peopleFolder = options.peopleFolder || "/My Knowledge/People";
-		this.personTemplate = options.personTemplate;
-		this.templaterHelper = options.templaterHelper;
-		this.logger = options.logger || (() => {});
+	constructor(plugin: VaePlugin) {
+		this.plugin = plugin;
+		this.peopleFolder =
+			plugin.settings?.peopleFolder || "/My Knowledge/People";
+		this.personTemplate = plugin.settings?.personTemplate;
+
+		// Example: Register a command and ribbon icon for quick processing
+		this.plugin.addCommand({
+			id: "process-active-person-note",
+			name: "Process Active Person Note",
+			callback: () => this.processActivePersonNote(),
+		});
+		this.plugin.addRibbonIcon("user", "Process Active Person Note", () =>
+			this.processActivePersonNote()
+		);
 	}
 
-	// Ensures the people folder exists, creates if missing
-	async ensureFolder(): Promise<TFolder> {
+	// Original API: create a new person note with all folders and template
+	public async createPersonNote(name: string): Promise<TFile> {
+		const vault = this.plugin.app.vault;
+		// Ensure people folder exists
 		const folderPath = normalizePath(this.peopleFolder);
-		let folder = this.vault.getAbstractFileByPath(folderPath);
+		let folder = vault.getAbstractFileByPath(folderPath);
 		if (!folder) {
-			this.logger(`Creating folder: ${folderPath}`);
-			folder = await this.vault.createFolder(folderPath);
+			folder = await vault.createFolder(folderPath);
 		}
 		if (!(folder instanceof TFolder)) {
 			throw new Error(`Path exists but is not a folder: ${folderPath}`);
 		}
-		return folder;
-	}
-
-	// Creates a new person note with required folder structure
-	async createPersonNote(name: string): Promise<TFile> {
-		await this.ensureFolder();
 
 		// Create person's main folder
 		const personFolderPath = normalizePath(`${this.peopleFolder}/${name}`);
-		let personFolder = this.vault.getAbstractFileByPath(personFolderPath);
+		let personFolder = vault.getAbstractFileByPath(personFolderPath);
 		if (!personFolder) {
-			this.logger(`Creating person folder: ${personFolderPath}`);
-			personFolder = await this.vault.createFolder(personFolderPath);
+			personFolder = await vault.createFolder(personFolderPath);
 		}
 		if (!(personFolder instanceof TFolder)) {
 			throw new Error(
@@ -59,41 +53,52 @@ export class PersonModule {
 		const interactionsFolderPath = normalizePath(
 			`${personFolderPath}/Interactions`
 		);
-		const interactionsFolder = this.vault.getAbstractFileByPath(
+		const interactionsFolder = vault.getAbstractFileByPath(
 			interactionsFolderPath
 		);
 		if (!interactionsFolder) {
-			this.logger(
-				`Creating interactions folder: ${interactionsFolderPath}`
-			);
-			await this.vault.createFolder(interactionsFolderPath);
+			await vault.createFolder(interactionsFolderPath);
 		}
 
 		// Create Media subfolder
 		const mediaFolderPath = normalizePath(`${personFolderPath}/Media`);
-		const mediaFolder = this.vault.getAbstractFileByPath(mediaFolderPath);
+		const mediaFolder = vault.getAbstractFileByPath(mediaFolderPath);
 		if (!mediaFolder) {
-			this.logger(`Creating media folder: ${mediaFolderPath}`);
-			await this.vault.createFolder(mediaFolderPath);
+			await vault.createFolder(mediaFolderPath);
 		}
 
 		// Create person note from template
 		const notePath = normalizePath(`${personFolderPath}/${name}.md`);
 		let content = `# ${name}\n`;
 		if (this.personTemplate) {
-			const templateFile = this.vault.getAbstractFileByPath(
+			const templateFile = vault.getAbstractFileByPath(
 				this.personTemplate
 			);
 			if (templateFile instanceof TFile) {
-				content = await this.vault.read(templateFile);
+				content = await vault.read(templateFile);
 				content = content.replace(/\{\{name\}\}/g, name);
-			} else {
-				this.logger(
-					`Template not found: ${this.personTemplate}, using default content.`
-				);
 			}
 		}
-		this.logger(`Creating person note: ${notePath}`);
-		return this.vault.create(notePath, content);
+		return vault.create(notePath, content);
+	}
+
+	// Example: process the active file as a person note (for command/ribbon)
+	public async processActivePersonNote() {
+		const { workspace, vault } = this.plugin.app;
+		const file = workspace.getActiveFile();
+		if (!file) return;
+
+		const now = new Date();
+		const isoNow = now.toISOString();
+		await this.plugin.app.fileManager.processFrontMatter(file, (fm) => {
+			fm["person-status"] = "processed";
+			fm["processed"] = isoNow;
+		});
+
+		const content = await vault.read(file);
+		const cleaned = content.replace(/```meta-bind-button[\s\S]*?```/, "");
+		await vault.modify(file, cleaned);
+
+		await FileHelper.moveToArchiveFolder(vault, file, now);
 	}
 }

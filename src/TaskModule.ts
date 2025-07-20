@@ -1,54 +1,61 @@
-import { TFile, TFolder, Vault, normalizePath } from "obsidian";
-
-export interface TaskModuleOptions {
-	vault: Vault;
-	projectFolder?: string;
-	taskTemplate?: string;
-	todoTemplate?: string;
-	logger?: (msg: string) => void;
-}
+import VaePlugin from "main";
+import { TFile, TFolder, normalizePath } from "obsidian";
+import { FileHelper } from "./FileHelper";
 
 export class TaskModule {
-	private vault: Vault;
+	private plugin: VaePlugin;
 	private projectFolder: string;
 	private taskTemplate?: string;
 	private todoTemplate?: string;
-	private logger: (msg: string) => void;
 
-	constructor(options: TaskModuleOptions) {
-		this.vault = options.vault;
-		this.projectFolder = options.projectFolder || "/My Projects";
-		this.taskTemplate = options.taskTemplate;
-		this.todoTemplate = options.todoTemplate;
-		this.logger = options.logger || (() => {});
+	constructor(plugin: VaePlugin) {
+		this.plugin = plugin;
+		this.projectFolder = plugin.settings?.projectFolder || "/My Projects";
+		this.taskTemplate = plugin.settings?.taskTemplate;
+		this.todoTemplate = plugin.settings?.todoTemplate;
+
+		// Example: Register a command and ribbon icon for quick processing
+		this.plugin.addCommand({
+			id: "process-active-task-note",
+			name: "Process Active Task Note",
+			callback: () => this.processActiveTaskNote(),
+		});
+		this.plugin.addRibbonIcon(
+			"check-square",
+			"Process Active Task Note",
+			() => this.processActiveTaskNote()
+		);
 	}
 
-	// Get list of all project folders for selection
-	async getProjectFolders(): Promise<string[]> {
-		const projectsFolder = this.vault.getAbstractFileByPath(
+	// Original API: get list of all project folders for selection
+	public async getProjectFolders(): Promise<string[]> {
+		const vault = this.plugin.app.vault;
+		const projectsFolder = vault.getAbstractFileByPath(
 			normalizePath(this.projectFolder)
 		);
 		if (!(projectsFolder instanceof TFolder)) {
 			return [];
 		}
-
 		return projectsFolder.children
 			.filter((child) => child instanceof TFolder)
 			.map((folder) => folder.name);
 	}
 
-	// Creates a new task note in the specified project's Tasks folder
-	async createTask(projectName: string, taskName: string): Promise<TFile> {
+	// Original API: create a new task note in the specified project's Tasks folder
+	public async createTask(
+		projectName: string,
+		taskName: string
+	): Promise<TFile> {
+		const vault = this.plugin.app.vault;
 		const tasksFolderPath = normalizePath(
 			`${this.projectFolder}/${projectName}/Tasks`
 		);
 		const taskNotePath = normalizePath(`${tasksFolderPath}/${taskName}.md`);
 
 		// Ensure Tasks folder exists
-		let tasksFolder = this.vault.getAbstractFileByPath(tasksFolderPath);
+		let tasksFolder = vault.getAbstractFileByPath(tasksFolderPath);
 		if (!tasksFolder) {
-			this.logger(`Creating tasks folder: ${tasksFolderPath}`);
-			tasksFolder = await this.vault.createFolder(tasksFolderPath);
+			tasksFolder = await vault.createFolder(tasksFolderPath);
 		}
 		if (!(tasksFolder instanceof TFolder)) {
 			throw new Error(
@@ -59,36 +66,28 @@ export class TaskModule {
 		// Create task note from template
 		let content = `# ${taskName}\n`;
 		if (this.taskTemplate) {
-			const templateFile = this.vault.getAbstractFileByPath(
-				this.taskTemplate
-			);
+			const templateFile = vault.getAbstractFileByPath(this.taskTemplate);
 			if (templateFile instanceof TFile) {
-				content = await this.vault.read(templateFile);
+				content = await vault.read(templateFile);
 				content = content.replace(/\{\{name\}\}/g, taskName);
-			} else {
-				this.logger(
-					`Template not found: ${this.taskTemplate}, using default content.`
-				);
 			}
 		}
-
-		this.logger(`Creating task note: ${taskNotePath}`);
-		return this.vault.create(taskNotePath, content);
+		return vault.create(taskNotePath, content);
 	}
 
-	// Creates a new todo note (not associated with a project)
-	async createTodo(
+	// Original API: create a new todo note (not associated with a project)
+	public async createTodo(
 		todoName: string,
 		todoFolder = "/My Core/Tasks"
 	): Promise<TFile> {
+		const vault = this.plugin.app.vault;
 		const todoFolderPath = normalizePath(todoFolder);
 		const todoNotePath = normalizePath(`${todoFolderPath}/${todoName}.md`);
 
 		// Ensure todo folder exists
-		let folder = this.vault.getAbstractFileByPath(todoFolderPath);
+		let folder = vault.getAbstractFileByPath(todoFolderPath);
 		if (!folder) {
-			this.logger(`Creating todo folder: ${todoFolderPath}`);
-			folder = await this.vault.createFolder(todoFolderPath);
+			folder = await vault.createFolder(todoFolderPath);
 		}
 		if (!(folder instanceof TFolder)) {
 			throw new Error(
@@ -99,20 +98,32 @@ export class TaskModule {
 		// Create todo note from template
 		let content = `# ${todoName}\n`;
 		if (this.todoTemplate) {
-			const templateFile = this.vault.getAbstractFileByPath(
-				this.todoTemplate
-			);
+			const templateFile = vault.getAbstractFileByPath(this.todoTemplate);
 			if (templateFile instanceof TFile) {
-				content = await this.vault.read(templateFile);
+				content = await vault.read(templateFile);
 				content = content.replace(/\{\{name\}\}/g, todoName);
-			} else {
-				this.logger(
-					`Template not found: ${this.todoTemplate}, using default content.`
-				);
 			}
 		}
+		return vault.create(todoNotePath, content);
+	}
 
-		this.logger(`Creating todo note: ${todoNotePath}`);
-		return this.vault.create(todoNotePath, content);
+	// Example: process the active file as a task note (for command/ribbon)
+	public async processActiveTaskNote() {
+		const { workspace, vault } = this.plugin.app;
+		const file = workspace.getActiveFile();
+		if (!file) return;
+
+		const now = new Date();
+		const isoNow = now.toISOString();
+		await this.plugin.app.fileManager.processFrontMatter(file, (fm) => {
+			fm["task-status"] = "processed";
+			fm["processed"] = isoNow;
+		});
+
+		const content = await vault.read(file);
+		const cleaned = content.replace(/```meta-bind-button[\s\S]*?```/, "");
+		await vault.modify(file, cleaned);
+
+		await FileHelper.moveToArchiveFolder(vault, file, now);
 	}
 }

@@ -1,6 +1,5 @@
 import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { PersonModule } from "./src/PersonModule";
-import { DEFAULT_SETTINGS, PluginSettings } from "./src/PluginSettings";
 import { ProjectModule } from "./src/ProjectModule";
 import {
 	InlineSuggest,
@@ -11,9 +10,10 @@ import {
 import { TaskModule } from "./src/TaskModule";
 import { TemplaterHelper } from "./src/TemplaterHelper";
 import { ThoughtModule } from "./src/ThoughtModule";
+import { DEFAULT_SETTINGS, VaeSettings } from "./src/VaeSettings";
 
 export default class VaePlugin extends Plugin {
-	settings: PluginSettings;
+	settings: VaeSettings;
 	personModule: PersonModule;
 	thoughtModule: ThoughtModule;
 	projectModule: ProjectModule;
@@ -24,36 +24,10 @@ export default class VaePlugin extends Plugin {
 		await this.loadSettings();
 
 		this.templaterHelper = new TemplaterHelper(this.app);
-
-		this.personModule = new PersonModule({
-			vault: this.app.vault,
-			peopleFolder: this.settings.peopleFolder,
-			personTemplate: this.settings.personTemplate,
-			templaterHelper: this.templaterHelper,
-			logger: (msg) => console.log("[PersonModule]", msg),
-		});
-
-		this.thoughtModule = new ThoughtModule({
-			plugin: this,
-			thoughtsFolder: this.settings.thoughtsFolder,
-			thoughtTemplate: this.settings.thoughtTemplate,
-			logger: (msg) => console.log("[ThoughtModule]", msg),
-		});
-
-		this.projectModule = new ProjectModule({
-			vault: this.app.vault,
-			projectFolder: this.settings.projectFolder,
-			projectTemplate: this.settings.projectTemplate,
-			logger: (msg) => console.log("[ProjectModule]", msg),
-		});
-
-		this.taskModule = new TaskModule({
-			vault: this.app.vault,
-			projectFolder: this.settings.projectFolder,
-			taskTemplate: this.settings.taskTemplate,
-			todoTemplate: this.settings.todoTemplate,
-			logger: (msg) => console.log("[TaskModule]", msg),
-		});
+		this.personModule = new PersonModule(this);
+		this.thoughtModule = new ThoughtModule(this);
+		this.projectModule = new ProjectModule(this);
+		this.taskModule = new TaskModule(this);
 
 		// Add commands
 		this.addCommand({
@@ -426,7 +400,7 @@ class VaeSettingTab extends PluginSettingTab {
 	private addFolderSetting(
 		name: string,
 		desc: string,
-		settingKey: keyof PluginSettings,
+		settingKey: keyof VaeSettings,
 		placeholder: string
 	) {
 		new Setting(this.containerEl)
@@ -462,7 +436,7 @@ class VaeSettingTab extends PluginSettingTab {
 	private addTemplateSetting(
 		name: string,
 		desc: string,
-		settingKey: keyof PluginSettings,
+		settingKey: keyof VaeSettings,
 		placeholder: string
 	) {
 		new Setting(this.containerEl)

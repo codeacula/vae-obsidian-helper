@@ -1,27 +1,16 @@
 import VaePlugin from "main";
-import { TFolder, Vault, normalizePath } from "obsidian";
 import { FileHelper } from "./FileHelper";
 
 export interface ThoughtModuleOptions {
 	plugin: VaePlugin;
-	thoughtsFolder?: string;
-	thoughtTemplate?: string;
 	logger?: (msg: string) => void;
 }
 
 export class ThoughtModule {
 	private plugin: VaePlugin;
-	private vault: Vault;
-	private thoughtsFolder: string;
-	private thoughtTemplate?: string;
-	private logger: (msg: string) => void;
 
-	constructor(options: ThoughtModuleOptions) {
-		this.plugin = options.plugin;
-		this.vault = options.plugin.app.vault;
-		this.thoughtsFolder = options.thoughtsFolder || "Thoughts";
-		this.thoughtTemplate = options.thoughtTemplate;
-		this.logger = options.logger || (() => {});
+	constructor(plugin: VaePlugin) {
+		this.plugin = plugin;
 
 		this.plugin.addCommand({
 			id: "process-thought",
@@ -32,20 +21,6 @@ export class ThoughtModule {
 		this.plugin.addRibbonIcon("checkmark", "Process Thought", () =>
 			this.processThought()
 		);
-	}
-
-	// Ensures the thoughts folder exists, creates if missing
-	async ensureFolder(): Promise<TFolder> {
-		const folderPath = normalizePath(this.thoughtsFolder);
-		let folder = this.vault.getAbstractFileByPath(folderPath);
-		if (!folder) {
-			this.logger(`Creating folder: ${folderPath}`);
-			folder = await this.vault.createFolder(folderPath);
-		}
-		if (!(folder instanceof TFolder)) {
-			throw new Error(`Path exists but is not a folder: ${folderPath}`);
-		}
-		return folder;
 	}
 
 	private async processThought() {
