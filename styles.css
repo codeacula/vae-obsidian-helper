@@ -47,6 +47,22 @@ If your plugin does not need CSS, delete this file.
     box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
 
+/* Input with button layout */
+.vae-input-with-button {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.vae-input-with-button .vae-input {
+    flex: 1;
+}
+
+.vae-input-with-button .vae-button {
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
 .vae-button-container {
     display: flex;
     gap: 10px;
@@ -78,26 +94,39 @@ If your plugin does not need CSS, delete this file.
     background-color: var(--interactive-accent-hover);
 }
 
-/* File and folder selector styles */
-.vae-folder-list, .vae-file-list {
-    max-height: 300px;
-    overflow-y: auto;
+/* Inline suggestion styles */
+.vae-suggestions {
+    background-color: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
-    margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 4px;
 }
 
-.vae-folder-option, .vae-file-option {
+.vae-suggestion-item {
     padding: 8px 12px;
     cursor: pointer;
     border-bottom: 1px solid var(--background-modifier-border);
-    color: var(--text-normal);
 }
 
-.vae-folder-option:hover, .vae-file-option:hover {
+.vae-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.vae-suggestion-item:hover,
+.vae-suggestion-active {
     background-color: var(--background-modifier-hover);
 }
 
-.vae-folder-option:last-child, .vae-file-option:last-child {
-    border-bottom: none;
+.vae-suggestion-title {
+    font-weight: 500;
+    color: var(--text-normal);
+}
+
+.vae-suggestion-path {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-top: 2px;
 }

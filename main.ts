@@ -2,6 +2,12 @@ import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { PersonModule } from "./src/PersonModule";
 import { DEFAULT_SETTINGS, PluginSettings } from "./src/PluginSettings";
 import { ProjectModule } from "./src/ProjectModule";
+import {
+	InlineSuggest,
+	getFileSuggestions,
+	getFolderSuggestions,
+	getProjectSuggestions,
+} from "./src/SuggestModals";
 import { TaskModule } from "./src/TaskModule";
 import { TemplaterHelper } from "./src/TemplaterHelper";
 import { ThoughtModule } from "./src/ThoughtModule";
@@ -127,7 +133,7 @@ export default class VaePlugin extends Plugin {
 
 		const modal = new ProjectTaskModal(
 			this.app,
-			projects,
+			this.settings.projectFolder,
 			async (projectName: string, taskName: string) => {
 				if (projectName && taskName.trim()) {
 					const taskFile = await this.taskModule.createTask(
@@ -250,18 +256,20 @@ class TextInputModal extends Modal {
 	}
 }
 
-// Modal for project task creation
+// Modal for project task creation with autosuggestion
 class ProjectTaskModal extends Modal {
-	private projects: string[];
+	private projectFolder: string;
 	private callback: (projectName: string, taskName: string) => void;
+	private selectedProject = "";
+	private projectSuggest?: InlineSuggest;
 
 	constructor(
 		app: App,
-		projects: string[],
+		projectFolder: string,
 		callback: (projectName: string, taskName: string) => void
 	) {
 		super(app);
-		this.projects = projects;
+		this.projectFolder = projectFolder;
 		this.callback = callback;
 	}
 
@@ -274,21 +282,29 @@ class ProjectTaskModal extends Modal {
 			cls: "vae-modal-title",
 		});
 
-		// Project selection
+		// Project selection with inline autosuggestion
 		const projectContainer = contentEl.createDiv("vae-field-container");
 		projectContainer.createEl("label", {
-			text: "Select Project:",
+			text: "Project:",
 			cls: "vae-label",
 		});
-		const projectSelect = projectContainer.createEl("select", {
-			cls: "vae-select",
+
+		const projectInput = projectContainer.createEl("input", {
+			type: "text",
+			placeholder: "Type to search for project...",
+			cls: "vae-input",
 		});
-		this.projects.forEach((project) => {
-			projectSelect.createEl("option", {
-				value: project,
-				text: project,
-			});
-		});
+
+		// Setup inline suggestions for project input
+		this.projectSuggest = new InlineSuggest(
+			this.app,
+			projectInput,
+			(query: string) =>
+				getProjectSuggestions(this.app, query, this.projectFolder),
+			(selected: string) => {
+				this.selectedProject = selected;
+			}
+		);
 
 		// Task name input
 		const taskContainer = contentEl.createDiv("vae-field-container");
@@ -313,8 +329,8 @@ class ProjectTaskModal extends Modal {
 		});
 
 		submitButton.onclick = () => {
-			if (taskInput.value.trim()) {
-				this.callback(projectSelect.value, taskInput.value);
+			if (this.selectedProject && taskInput.value.trim()) {
+				this.callback(this.selectedProject, taskInput.value);
 				this.close();
 			}
 		};
@@ -324,26 +340,34 @@ class ProjectTaskModal extends Modal {
 		};
 
 		taskInput.addEventListener("keydown", (e) => {
-			if (e.key === "Enter" && taskInput.value.trim()) {
-				this.callback(projectSelect.value, taskInput.value);
+			if (
+				e.key === "Enter" &&
+				this.selectedProject &&
+				taskInput.value.trim()
+			) {
+				this.callback(this.selectedProject, taskInput.value);
 				this.close();
 			} else if (e.key === "Escape") {
 				this.close();
 			}
 		});
 
-		taskInput.focus();
+		projectInput.focus();
 	}
 
 	onClose() {
+		if (this.projectSuggest) {
+			this.projectSuggest.destroy();
+		}
 		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
 
-// Settings tab with file selectors
+// Settings tab with inline autosuggestions
 class VaeSettingTab extends PluginSettingTab {
 	plugin: VaePlugin;
+	private suggestInstances: InlineSuggest[] = [];
 
 	constructor(app: App, plugin: VaePlugin) {
 		super(app, plugin);
@@ -353,6 +377,9 @@ class VaeSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+
+		// Clean up any existing suggest instances
+		this.cleanupSuggestInstances();
 
 		containerEl.createEl("h2", { text: "VAE Helper Settings" });
 
@@ -439,23 +466,23 @@ class VaeSettingTab extends PluginSettingTab {
 						(this.plugin.settings[settingKey] as string) = value;
 						await this.plugin.saveSettings();
 					});
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("Browse")
-					.setTooltip("Select folder")
-					.onClick(() => {
-						const modal = new FolderSelectorModal(
-							this.app,
-							(selectedFolder: string) => {
-								(this.plugin.settings[settingKey] as string) =
-									selectedFolder;
-								this.plugin.saveSettings();
-								this.display(); // Refresh the settings display
-							}
-						);
-						modal.open();
-					});
+
+				// Add inline suggestions after the input is created
+				setTimeout(() => {
+					const inputEl = text.inputEl;
+					const suggestInstance = new InlineSuggest(
+						this.app,
+						inputEl,
+						(query: string) =>
+							getFolderSuggestions(this.app, query),
+						async (selected: string) => {
+							(this.plugin.settings[settingKey] as string) =
+								selected;
+							await this.plugin.saveSettings();
+						}
+					);
+					this.suggestInstances.push(suggestInstance);
+				}, 0);
 			});
 	}
 
@@ -475,144 +502,33 @@ class VaeSettingTab extends PluginSettingTab {
 						(this.plugin.settings[settingKey] as string) = value;
 						await this.plugin.saveSettings();
 					});
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("Browse")
-					.setTooltip("Select template file")
-					.onClick(() => {
-						const modal = new FileSelectorModal(
-							this.app,
-							(selectedFile: string) => {
-								(this.plugin.settings[settingKey] as string) =
-									selectedFile;
-								this.plugin.saveSettings();
-								this.display(); // Refresh the settings display
-							},
-							".md"
-						);
-						modal.open();
-					});
+
+				// Add inline suggestions after the input is created
+				setTimeout(() => {
+					const inputEl = text.inputEl;
+					const suggestInstance = new InlineSuggest(
+						this.app,
+						inputEl,
+						(query: string) =>
+							getFileSuggestions(this.app, query, ".md"),
+						async (selected: string) => {
+							(this.plugin.settings[settingKey] as string) =
+								selected;
+							await this.plugin.saveSettings();
+						}
+					);
+					this.suggestInstances.push(suggestInstance);
+				}, 0);
 			});
 	}
-}
 
-// Modal for folder selection
-class FolderSelectorModal extends Modal {
-	private callback: (folderPath: string) => void;
-
-	constructor(app: App, callback: (folderPath: string) => void) {
-		super(app);
-		this.callback = callback;
+	private cleanupSuggestInstances() {
+		this.suggestInstances.forEach((instance) => instance.destroy());
+		this.suggestInstances = [];
 	}
 
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.addClass("vae-modal");
-
-		contentEl.createEl("h2", {
-			text: "Select Folder",
-			cls: "vae-modal-title",
-		});
-
-		const folderContainer = contentEl.createDiv("vae-folder-list");
-
-		// Get all folders
-		const folders = this.app.vault
-			.getAllLoadedFiles()
-			.filter((file) => file.hasOwnProperty("children"))
-			.map((folder) => folder.path)
-			.sort();
-
-		// Add root option
-		const rootOption = folderContainer.createDiv("vae-folder-option");
-		rootOption.textContent = "/ (Root)";
-		rootOption.onclick = () => {
-			this.callback("/");
-			this.close();
-		};
-
-		// Add folder options
-		folders.forEach((folderPath) => {
-			const folderOption = folderContainer.createDiv("vae-folder-option");
-			folderOption.textContent = folderPath;
-			folderOption.onclick = () => {
-				this.callback(folderPath);
-				this.close();
-			};
-		});
-
-		const buttonContainer = contentEl.createDiv("vae-button-container");
-		const cancelButton = buttonContainer.createEl("button", {
-			text: "Cancel",
-			cls: "vae-button",
-		});
-		cancelButton.onclick = () => this.close();
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
-
-// Modal for file selection
-class FileSelectorModal extends Modal {
-	private callback: (filePath: string) => void;
-	private extension?: string;
-
-	constructor(
-		app: App,
-		callback: (filePath: string) => void,
-		extension?: string
-	) {
-		super(app);
-		this.callback = callback;
-		this.extension = extension;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.addClass("vae-modal");
-
-		contentEl.createEl("h2", {
-			text: "Select File",
-			cls: "vae-modal-title",
-		});
-
-		const fileContainer = contentEl.createDiv("vae-file-list");
-
-		// Get all files
-		let files = this.app.vault.getMarkdownFiles();
-
-		// Filter by extension if specified
-		if (this.extension && this.extension.length > 0) {
-			const ext = this.extension;
-			files = files.filter((file) => file.path.endsWith(ext));
-		}
-
-		files.sort((a, b) => a.path.localeCompare(b.path));
-
-		// Add file options
-		files.forEach((file) => {
-			const fileOption = fileContainer.createDiv("vae-file-option");
-			fileOption.textContent = file.path;
-			fileOption.onclick = () => {
-				this.callback(file.path);
-				this.close();
-			};
-		});
-
-		const buttonContainer = contentEl.createDiv("vae-button-container");
-		const cancelButton = buttonContainer.createEl("button", {
-			text: "Cancel",
-			cls: "vae-button",
-		});
-		cancelButton.onclick = () => this.close();
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+	hide() {
+		this.cleanupSuggestInstances();
+		super.hide();
 	}
 }
