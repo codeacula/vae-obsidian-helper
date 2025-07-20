@@ -34,7 +34,7 @@ export default class VaePlugin extends Plugin {
 		});
 
 		this.thoughtModule = new ThoughtModule({
-			vault: this.app.vault,
+			plugin: this,
 			thoughtsFolder: this.settings.thoughtsFolder,
 			thoughtTemplate: this.settings.thoughtTemplate,
 			logger: (msg) => console.log("[ThoughtModule]", msg),
@@ -79,16 +79,6 @@ export default class VaePlugin extends Plugin {
 			name: "New To Do",
 			callback: () => this.promptCreateTodo(),
 		});
-
-		this.addCommand({
-			id: "process-thought",
-			name: "Process Thought",
-			callback: () => this.processThought(),
-		});
-
-		this.addRibbonIcon("checkmark", "Process Thought", () =>
-			this.processThought()
-		);
 
 		// Add settings tab
 		this.addSettingTab(new VaeSettingTab(this.app, this));
@@ -174,23 +164,6 @@ export default class VaePlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-
-	private async processThought() {
-		const { workspace, vault } = this.app;
-		const file = workspace.getActiveFile();
-		if (!file) return;
-
-		const now = new Date();
-		const isoNow = now.toISOString();
-		await this.app.fileManager.processFrontMatter(file, (fm) => {
-			fm["note-status"] = "processed";
-			fm["processed"] = isoNow;
-		});
-
-		const content = await vault.read(file);
-		const cleaned = content.replace(/```meta-bind-button[\s\S]*?```/, "");
-		await vault.modify(file, cleaned);
 	}
 }
 

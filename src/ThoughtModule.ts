@@ -1,23 +1,37 @@
-import { TFile, TFolder, Vault, normalizePath } from "obsidian";
+import VaePlugin from "main";
+import { TFolder, Vault, normalizePath } from "obsidian";
+import { FileHelper } from "./FileHelper";
 
 export interface ThoughtModuleOptions {
-	vault: Vault;
+	plugin: VaePlugin;
 	thoughtsFolder?: string;
 	thoughtTemplate?: string;
 	logger?: (msg: string) => void;
 }
 
 export class ThoughtModule {
+	private plugin: VaePlugin;
 	private vault: Vault;
 	private thoughtsFolder: string;
 	private thoughtTemplate?: string;
 	private logger: (msg: string) => void;
 
 	constructor(options: ThoughtModuleOptions) {
-		this.vault = options.vault;
+		this.plugin = options.plugin;
+		this.vault = options.plugin.app.vault;
 		this.thoughtsFolder = options.thoughtsFolder || "Thoughts";
 		this.thoughtTemplate = options.thoughtTemplate;
 		this.logger = options.logger || (() => {});
+
+		this.plugin.addCommand({
+			id: "process-thought",
+			name: "Process Thought",
+			callback: () => this.processThought(),
+		});
+
+		this.plugin.addRibbonIcon("checkmark", "Process Thought", () =>
+			this.processThought()
+		);
 	}
 
 	// Ensures the thoughts folder exists, creates if missing
@@ -34,25 +48,22 @@ export class ThoughtModule {
 		return folder;
 	}
 
-	// Creates a new thought note in the thoughts folder, optionally from a template
-	async createThoughtNote(title: string): Promise<TFile> {
-		await this.ensureFolder();
-		const notePath = normalizePath(`${this.thoughtsFolder}/${title}.md`);
-		let content = `# ${title}\n`;
-		if (this.thoughtTemplate) {
-			const templateFile = this.vault.getAbstractFileByPath(
-				this.thoughtTemplate
-			);
-			if (templateFile instanceof TFile) {
-				content = await this.vault.read(templateFile);
-				content = content.replace(/\{\{title\}\}/g, title);
-			} else {
-				this.logger(
-					`Template not found: ${this.thoughtTemplate}, using default content.`
-				);
-			}
-		}
-		this.logger(`Creating thought note: ${notePath}`);
-		return this.vault.create(notePath, content);
+	private async processThought() {
+		const { workspace, vault } = this.plugin.app;
+		const file = workspace.getActiveFile();
+		if (!file) return;
+
+		const now = new Date();
+		const isoNow = now.toISOString();
+		await this.plugin.app.fileManager.processFrontMatter(file, (fm) => {
+			fm["note-status"] = "processed";
+			fm["processed"] = isoNow;
+		});
+
+		const content = await vault.read(file);
+		const cleaned = content.replace(/```meta-bind-button[\s\S]*?```/, "");
+		await vault.modify(file, cleaned);
+
+		await FileHelper.moveToArchiveFolder(vault, file, now);
 	}
 }

@@ -1,4 +1,5 @@
 import { TFile, TFolder, Vault, normalizePath } from "obsidian";
+import { FileHelper } from "./FileHelper";
 
 export interface ProjectModuleOptions {
 	vault: Vault;
@@ -52,7 +53,7 @@ export class ProjectModule {
 		const projectFolderPath = normalizePath(
 			`${this.projectFolder}/${sanitizedName}`
 		);
-		const tasksFolderPath = normalizePath(`${projectFolderPath}/Tasks`);
+
 		const projectNotePath = normalizePath(
 			`${projectFolderPath}/${sanitizedName}.md`
 		);
@@ -69,12 +70,15 @@ export class ProjectModule {
 			);
 		}
 
-		// Create Tasks subfolder
-		const tasksFolder = this.vault.getAbstractFileByPath(tasksFolderPath);
-		if (!tasksFolder) {
-			this.logger(`Creating tasks folder: ${tasksFolderPath}`);
-			await this.vault.createFolder(tasksFolderPath);
-		}
+		// Create Subfolders
+		await FileHelper.createFolderIfNotExists(
+			normalizePath(`${projectFolderPath}/Notes`),
+			this.vault
+		);
+		await FileHelper.createFolderIfNotExists(
+			normalizePath(`${projectFolderPath}/Tasks`),
+			this.vault
+		);
 
 		// Create project note from template
 		let content = `# ${name}\n`;
