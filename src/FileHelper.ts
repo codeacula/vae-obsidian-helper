@@ -1,0 +1,32 @@
+// Plan:
+// - Accept vault, file, and date as parameters
+// - Build a year/month folder path
+// - Create the folder if it doesn't exist
+// - Move the file to the new path
+// - Return the new path
+
+import { TFile, Vault } from "obsidian";
+
+export async function moveToArchiveFolder(
+	vault: Vault,
+	file: TFile,
+	date: Date
+): Promise<string> {
+	// Determine parent folder of the file
+	const parentFolder = file.parent?.path || "";
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const newFolder = parentFolder
+		? `${parentFolder}/${year}/${month}`
+		: `${year}/${month}`;
+	const newPath = `${newFolder}/${file.basename}.md`;
+
+	try {
+		await vault.createFolder(newFolder);
+	} catch {
+		/* empty */
+	}
+
+	await vault.rename(file, newPath);
+	return newPath;
+}
