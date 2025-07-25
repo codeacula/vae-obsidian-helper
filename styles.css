@@ -8,6 +8,14 @@ If your plugin does not need CSS, delete this file.
 */
 
 /* VAE Plugin Styles */
+/* Adjust the plugin colour palette by editing the variables below */
+
+:root {
+    --vae-royal-blue: #4169e1;
+    --vae-ivory: #fffff0;
+    --vae-gold: #ffd700;
+    --vae-silver: #c0c0c0;
+}
 
 .vae-modal {
     padding: 20px;

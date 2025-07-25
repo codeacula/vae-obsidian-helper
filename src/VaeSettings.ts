@@ -1,13 +1,17 @@
 export interface VaeSettings {
-	peopleFolder: string;
-	personTemplate: string;
-	projectFolder: string;
-	projectTemplate: string;
-	thoughtsFolder: string;
-	thoughtTemplate: string;
-	taskTemplate: string;
-	todoTemplate: string;
-	todoFolder: string;
+        peopleFolder: string;
+        personTemplate: string;
+        projectFolder: string;
+        projectTemplate: string;
+        thoughtsFolder: string;
+        thoughtTemplate: string;
+        taskTemplate: string;
+        todoTemplate: string;
+        todoFolder: string;
+        personalitiesFolder: string;
+        promptsFolder: string;
+        defaultPersonality: string;
+        defaultPrompt: string;
 }
 
 export const DEFAULT_SETTINGS: VaeSettings = {
@@ -18,6 +22,10 @@ export const DEFAULT_SETTINGS: VaeSettings = {
 	thoughtsFolder: "/My Consciousness/Thoughts",
 	thoughtTemplate: "/Vae/System/Templates/Thought Template.md",
 	taskTemplate: "/Vae/System/Templates/Tasks/Task Template.md",
-	todoTemplate: "/Vae/System/Templates/To Do Template.md",
-	todoFolder: "/My Core/Tasks",
+        todoTemplate: "/Vae/System/Templates/To Do Template.md",
+        todoFolder: "/My Core/Tasks",
+        personalitiesFolder: "/Vae/System/Personalities",
+        promptsFolder: "/Vae/System/Prompts",
+        defaultPersonality: "",
+        defaultPrompt: "",
 };

@@ -1,5 +1,5 @@
 import VaePlugin from "main";
-import { TFile, TFolder, normalizePath } from "obsidian";
+import { Notice, TFile, TFolder, normalizePath } from "obsidian";
 import { FileHelper } from "./FileHelper";
 
 export class PersonModule {
@@ -25,62 +25,85 @@ export class PersonModule {
 	}
 
 	// Original API: create a new person note with all folders and template
-	public async createPersonNote(name: string): Promise<TFile> {
-		const vault = this.plugin.app.vault;
-		// Ensure people folder exists
-		const folderPath = normalizePath(this.peopleFolder);
-		let folder = vault.getAbstractFileByPath(folderPath);
-		if (!folder) {
-			folder = await vault.createFolder(folderPath);
-		}
-		if (!(folder instanceof TFolder)) {
-			throw new Error(`Path exists but is not a folder: ${folderPath}`);
-		}
+        public async createPersonNote(name: string): Promise<TFile> {
+                const vault = this.plugin.app.vault;
+                const cleanName = FileHelper.sanitizeName(name);
+
+                // Ensure people folder exists
+                const folderPath = normalizePath(this.peopleFolder);
+                let folder = vault.getAbstractFileByPath(folderPath);
+                if (!folder) {
+                        try {
+                                folder = await vault.createFolder(folderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${folderPath}`);
+                                throw err;
+                        }
+                }
+                if (!(folder instanceof TFolder)) {
+                        throw new Error(`Path exists but is not a folder: ${folderPath}`);
+                }
 
 		// Create person's main folder
-		const personFolderPath = normalizePath(`${this.peopleFolder}/${name}`);
-		let personFolder = vault.getAbstractFileByPath(personFolderPath);
-		if (!personFolder) {
-			personFolder = await vault.createFolder(personFolderPath);
-		}
-		if (!(personFolder instanceof TFolder)) {
-			throw new Error(
-				`Path exists but is not a folder: ${personFolderPath}`
-			);
-		}
+                let personFolderPath = normalizePath(`${this.peopleFolder}/${cleanName}`);
+                personFolderPath = await FileHelper.getUniqueFolderPath(vault, personFolderPath);
+                let personFolder = vault.getAbstractFileByPath(personFolderPath);
+                if (!personFolder) {
+                        try {
+                                personFolder = await vault.createFolder(personFolderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${personFolderPath}`);
+                                throw err;
+                        }
+                }
+                if (!(personFolder instanceof TFolder)) {
+                        throw new Error(
+                                `Path exists but is not a folder: ${personFolderPath}`
+                        );
+                }
 
 		// Create Interactions subfolder
-		const interactionsFolderPath = normalizePath(
-			`${personFolderPath}/Interactions`
-		);
-		const interactionsFolder = vault.getAbstractFileByPath(
-			interactionsFolderPath
-		);
-		if (!interactionsFolder) {
-			await vault.createFolder(interactionsFolderPath);
-		}
+                const interactionsFolderPath = normalizePath(`${personFolderPath}/Interactions`);
+                const interactionsFolder = vault.getAbstractFileByPath(interactionsFolderPath);
+                if (!interactionsFolder) {
+                        try {
+                                await vault.createFolder(interactionsFolderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${interactionsFolderPath}`);
+                        }
+                }
 
 		// Create Media subfolder
-		const mediaFolderPath = normalizePath(`${personFolderPath}/Media`);
-		const mediaFolder = vault.getAbstractFileByPath(mediaFolderPath);
-		if (!mediaFolder) {
-			await vault.createFolder(mediaFolderPath);
-		}
+                const mediaFolderPath = normalizePath(`${personFolderPath}/Media`);
+                const mediaFolder = vault.getAbstractFileByPath(mediaFolderPath);
+                if (!mediaFolder) {
+                        try {
+                                await vault.createFolder(mediaFolderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${mediaFolderPath}`);
+                        }
+                }
 
 		// Create person note from template
-		const notePath = normalizePath(`${personFolderPath}/${name}.md`);
-		let content = `# ${name}\n`;
-		if (this.personTemplate) {
-			const templateFile = vault.getAbstractFileByPath(
-				this.personTemplate
-			);
-			if (templateFile instanceof TFile) {
-				content = await vault.read(templateFile);
-				content = content.replace(/\{\{name\}\}/g, name);
-			}
-		}
-		return vault.create(notePath, content);
-	}
+                let notePath = normalizePath(`${personFolderPath}/${cleanName}.md`);
+                notePath = await FileHelper.getUniqueFilePath(vault, notePath);
+                let content = `# ${cleanName}\n`;
+                if (this.personTemplate) {
+                        const templateFile = vault.getAbstractFileByPath(
+                                this.personTemplate
+                        );
+                        if (templateFile instanceof TFile) {
+                                content = await vault.read(templateFile);
+                                content = content.replace(/\{\{name\}\}/g, cleanName);
+                        }
+                }
+                try {
+                        return await vault.create(notePath, content);
+                } catch (err) {
+                        new Notice(`Failed to create file ${notePath}`);
+                        throw err;
+                }
+        }
 
 	// Example: process the active file as a person note (for command/ribbon)
 	public async processActivePersonNote() {
