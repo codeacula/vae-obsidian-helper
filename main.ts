@@ -1,4 +1,4 @@
-import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Modal, Plugin, PluginSettingTab, Setting, Notice } from "obsidian";
 import { PersonModule } from "./src/PersonModule";
 import { ProjectModule } from "./src/ProjectModule";
 import {
@@ -11,6 +11,9 @@ import { TaskModule } from "./src/TaskModule";
 import { TemplaterHelper } from "./src/TemplaterHelper";
 import { ThoughtModule } from "./src/ThoughtModule";
 import { DEFAULT_SETTINGS, VaeSettings } from "./src/VaeSettings";
+import { NewItemModal, NewItemType } from "./src/NewItemModal";
+import { ChatModal } from "./src/ChatModal";
+import { listMarkdownFiles } from "./src/ChatUtils";
 
 export default class VaePlugin extends Plugin {
 	settings: VaeSettings;
@@ -29,104 +32,26 @@ export default class VaePlugin extends Plugin {
 		this.projectModule = new ProjectModule(this);
 		this.taskModule = new TaskModule(this);
 
-		// Add commands
-		this.addCommand({
-			id: "create-person",
-			name: "Create Person",
-			callback: () => this.promptCreatePerson(),
-		});
+                // Add commands
+                this.addCommand({
+                        id: "vae-new-item",
+                        name: "Create New Item",
+                        callback: () => this.openNewItemModal(),
+                });
 
-		this.addCommand({
-			id: "create-project",
-			name: "Create Project",
-			callback: () => this.promptCreateProject(),
-		});
-
-		this.addCommand({
-			id: "new-task",
-			name: "New Task",
-			callback: () => this.promptCreateTask(),
-		});
-
-		this.addCommand({
-			id: "new-todo",
-			name: "New To Do",
-			callback: () => this.promptCreateTodo(),
-		});
+                this.addCommand({
+                        id: "vae-chat",
+                        name: "Open Vae Chat",
+                        callback: () => new ChatModal(this.app, this).open(),
+                });
 
 		// Add settings tab
 		this.addSettingTab(new VaeSettingTab(this.app, this));
 	}
 
-	private async promptCreatePerson() {
-		const modal = new TextInputModal(
-			this.app,
-			"Enter person's full name:",
-			async (name: string) => {
-				if (name.trim()) {
-					const personFile = await this.personModule.createPersonNote(
-						name.trim()
-					);
-					await this.app.workspace.getLeaf().openFile(personFile);
-				}
-			}
-		);
-		modal.open();
-	}
-
-	private async promptCreateProject() {
-		const modal = new TextInputModal(
-			this.app,
-			"Enter project name:",
-			async (name: string) => {
-				if (name.trim()) {
-					const { projectFile } =
-						await this.projectModule.createProject(name.trim());
-					await this.app.workspace.getLeaf().openFile(projectFile);
-				}
-			}
-		);
-		modal.open();
-	}
-
-	private async promptCreateTask() {
-		const projects = await this.taskModule.getProjectFolders();
-		if (projects.length === 0) {
-			return;
-		}
-
-		const modal = new ProjectTaskModal(
-			this.app,
-			this.settings.projectFolder,
-			async (projectName: string, taskName: string) => {
-				if (projectName && taskName.trim()) {
-					const taskFile = await this.taskModule.createTask(
-						projectName,
-						taskName.trim()
-					);
-					await this.app.workspace.getLeaf().openFile(taskFile);
-				}
-			}
-		);
-		modal.open();
-	}
-
-	private async promptCreateTodo() {
-		const modal = new TextInputModal(
-			this.app,
-			"Enter todo name:",
-			async (name: string) => {
-				if (name.trim()) {
-					const todoFile = await this.taskModule.createTodo(
-						name.trim(),
-						this.settings.todoFolder
-					);
-					await this.app.workspace.getLeaf().openFile(todoFile);
-				}
-			}
-		);
-		modal.open();
-	}
+        private openNewItemModal(type: NewItemType = "Person") {
+                new NewItemModal(this.app, this, type).open();
+        }
 
 	async loadSettings() {
 		this.settings = Object.assign(
@@ -142,174 +67,6 @@ export default class VaePlugin extends Plugin {
 }
 
 // Modal for text input
-class TextInputModal extends Modal {
-	private callback: (value: string) => void;
-	private prompt: string;
-
-	constructor(app: App, prompt: string, callback: (value: string) => void) {
-		super(app);
-		this.prompt = prompt;
-		this.callback = callback;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.addClass("vae-modal");
-
-		contentEl.createEl("h2", { text: this.prompt, cls: "vae-modal-title" });
-
-		const inputContainer = contentEl.createDiv("vae-input-container");
-		const inputEl = inputContainer.createEl("input", {
-			type: "text",
-			placeholder: "Enter name...",
-			cls: "vae-input",
-		});
-		inputEl.focus();
-
-		const buttonContainer = contentEl.createDiv("vae-button-container");
-		const submitButton = buttonContainer.createEl("button", {
-			text: "Create",
-			cls: "mod-cta vae-button",
-		});
-		const cancelButton = buttonContainer.createEl("button", {
-			text: "Cancel",
-			cls: "vae-button",
-		});
-
-		submitButton.onclick = () => {
-			if (inputEl.value.trim()) {
-				this.callback(inputEl.value);
-				this.close();
-			}
-		};
-
-		cancelButton.onclick = () => {
-			this.close();
-		};
-
-		inputEl.addEventListener("keydown", (e) => {
-			if (e.key === "Enter" && inputEl.value.trim()) {
-				this.callback(inputEl.value);
-				this.close();
-			} else if (e.key === "Escape") {
-				this.close();
-			}
-		});
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
-
-// Modal for project task creation with autosuggestion
-class ProjectTaskModal extends Modal {
-	private projectFolder: string;
-	private callback: (projectName: string, taskName: string) => void;
-	private selectedProject = "";
-	private projectSuggest?: InlineSuggest;
-
-	constructor(
-		app: App,
-		projectFolder: string,
-		callback: (projectName: string, taskName: string) => void
-	) {
-		super(app);
-		this.projectFolder = projectFolder;
-		this.callback = callback;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.addClass("vae-modal");
-
-		contentEl.createEl("h2", {
-			text: "Create New Task",
-			cls: "vae-modal-title",
-		});
-
-		// Project selection with inline autosuggestion
-		const projectContainer = contentEl.createDiv("vae-field-container");
-		projectContainer.createEl("label", {
-			text: "Project:",
-			cls: "vae-label",
-		});
-
-		const projectInput = projectContainer.createEl("input", {
-			type: "text",
-			placeholder: "Type to search for project...",
-			cls: "vae-input",
-		});
-
-		// Setup inline suggestions for project input
-		this.projectSuggest = new InlineSuggest(
-			this.app,
-			projectInput,
-			(query: string) =>
-				getProjectSuggestions(this.app, query, this.projectFolder),
-			(selected: string) => {
-				this.selectedProject = selected;
-			}
-		);
-
-		// Task name input
-		const taskContainer = contentEl.createDiv("vae-field-container");
-		taskContainer.createEl("label", {
-			text: "Task Name:",
-			cls: "vae-label",
-		});
-		const taskInput = taskContainer.createEl("input", {
-			type: "text",
-			placeholder: "Enter task name...",
-			cls: "vae-input",
-		});
-
-		const buttonContainer = contentEl.createDiv("vae-button-container");
-		const submitButton = buttonContainer.createEl("button", {
-			text: "Create Task",
-			cls: "mod-cta vae-button",
-		});
-		const cancelButton = buttonContainer.createEl("button", {
-			text: "Cancel",
-			cls: "vae-button",
-		});
-
-		submitButton.onclick = () => {
-			if (this.selectedProject && taskInput.value.trim()) {
-				this.callback(this.selectedProject, taskInput.value);
-				this.close();
-			}
-		};
-
-		cancelButton.onclick = () => {
-			this.close();
-		};
-
-		taskInput.addEventListener("keydown", (e) => {
-			if (
-				e.key === "Enter" &&
-				this.selectedProject &&
-				taskInput.value.trim()
-			) {
-				this.callback(this.selectedProject, taskInput.value);
-				this.close();
-			} else if (e.key === "Escape") {
-				this.close();
-			}
-		});
-
-		projectInput.focus();
-	}
-
-	onClose() {
-		if (this.projectSuggest) {
-			this.projectSuggest.destroy();
-		}
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
 
 // Settings tab with inline autosuggestions
 class VaeSettingTab extends PluginSettingTab {
@@ -389,13 +146,41 @@ class VaeSettingTab extends PluginSettingTab {
 			"thoughtsFolder",
 			"/My Consciousness/Thoughts"
 		);
-		this.addTemplateSetting(
-			"Thought template",
-			"Template file for creating thought notes",
-			"thoughtTemplate",
-			"/Vae/System/Templates/Thought Template.md"
-		);
-	}
+                this.addTemplateSetting(
+                        "Thought template",
+                        "Template file for creating thought notes",
+                        "thoughtTemplate",
+                        "/Vae/System/Templates/Thought Template.md"
+                );
+
+                // Chat settings
+                containerEl.createEl("h3", { text: "Chat" });
+                this.addFolderSetting(
+                        "Personalities folder",
+                        "Folder containing personality markdown files",
+                        "personalitiesFolder",
+                        "/Vae/System/Personalities"
+                );
+                this.addFolderSetting(
+                        "Prompts folder",
+                        "Folder containing extra prompt markdown files",
+                        "promptsFolder",
+                        "/Vae/System/Prompts"
+                );
+                this.addDropdownSetting(
+                        "Default personality",
+                        "Personality file used by default",
+                        "defaultPersonality",
+                        this.plugin.settings.personalitiesFolder
+                );
+                this.addDropdownSetting(
+                        "Default prompt",
+                        "Prompt used by default (optional)",
+                        "defaultPrompt",
+                        this.plugin.settings.promptsFolder,
+                        true
+                );
+        }
 
 	private addFolderSetting(
 		name: string,
@@ -433,12 +218,12 @@ class VaeSettingTab extends PluginSettingTab {
 			});
 	}
 
-	private addTemplateSetting(
-		name: string,
-		desc: string,
-		settingKey: keyof VaeSettings,
-		placeholder: string
-	) {
+        private addTemplateSetting(
+                name: string,
+                desc: string,
+                settingKey: keyof VaeSettings,
+                placeholder: string
+        ) {
 		new Setting(this.containerEl)
 			.setName(name)
 			.setDesc(desc)
@@ -464,10 +249,34 @@ class VaeSettingTab extends PluginSettingTab {
 							await this.plugin.saveSettings();
 						}
 					);
-					this.suggestInstances.push(suggestInstance);
-				}, 0);
-			});
-	}
+                                this.suggestInstances.push(suggestInstance);
+                        }, 0);
+                });
+        }
+
+        private addDropdownSetting(
+                name: string,
+                desc: string,
+                settingKey: keyof VaeSettings,
+                folder: string,
+                allowBlank = false
+        ) {
+                new Setting(this.containerEl)
+                        .setName(name)
+                        .setDesc(desc)
+                        .addDropdown(async (dropdown) => {
+                                const files = await listMarkdownFiles(this.app, folder);
+                                if (allowBlank) {
+                                        dropdown.addOption("", "(none)");
+                                }
+                                files.forEach((f) => dropdown.addOption(f.basename, f.basename));
+                                dropdown.setValue(this.plugin.settings[settingKey] as string);
+                                dropdown.onChange(async (val) => {
+                                        (this.plugin.settings[settingKey] as string) = val;
+                                        await this.plugin.saveSettings();
+                                });
+                        });
+        }
 
 	private cleanupSuggestInstances() {
 		this.suggestInstances.forEach((instance) => instance.destroy());

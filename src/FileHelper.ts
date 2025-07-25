@@ -1,7 +1,7 @@
 import { TFile, TFolder, Vault } from "obsidian";
 
 export class FileHelper {
-	constructor() {}
+        constructor() {}
 
 	public static async createFolderIfNotExists(
 		path: string,
@@ -14,11 +14,11 @@ export class FileHelper {
 		return folder;
 	}
 
-	public static async moveToArchiveFolder(
-		vault: Vault,
-		file: TFile,
-		date: Date
-	): Promise<string> {
+        public static async moveToArchiveFolder(
+                vault: Vault,
+                file: TFile,
+                date: Date
+        ): Promise<string> {
 		// Determine parent folder of the file
 		const parentFolder = file.parent?.path || "";
 		const year = date.getFullYear();
@@ -34,7 +34,57 @@ export class FileHelper {
 			/* empty */
 		}
 
-		await vault.rename(file, newPath);
-		return newPath;
-	}
+                await vault.rename(file, newPath);
+                return newPath;
+        }
+
+        /** Sanitize a name for safe file/folder usage */
+        public static sanitizeName(name: string): string {
+                return name
+                        .replace(/[<>:"/\\|?*]/g, "")
+                        .replace(/\s+/g, " ")
+                        .trim();
+        }
+
+        /**
+         * Return a unique file path by appending _2, _3, ... if needed
+         */
+        public static async getUniqueFilePath(
+                vault: Vault,
+                path: string
+        ): Promise<string> {
+                if (!vault.getAbstractFileByPath(path)) {
+                        return path;
+                }
+                const extIndex = path.lastIndexOf(".");
+                const base = extIndex !== -1 ? path.substring(0, extIndex) : path;
+                const ext = extIndex !== -1 ? path.substring(extIndex) : "";
+
+                let counter = 2;
+                let newPath = `${base}_${counter}${ext}`;
+                while (vault.getAbstractFileByPath(newPath)) {
+                        counter++;
+                        newPath = `${base}_${counter}${ext}`;
+                }
+                return newPath;
+        }
+
+        /**
+         * Return a unique folder path by appending _2, _3, ... if needed
+         */
+        public static async getUniqueFolderPath(
+                vault: Vault,
+                path: string
+        ): Promise<string> {
+                if (!vault.getAbstractFileByPath(path)) {
+                        return path;
+                }
+                let counter = 2;
+                let newPath = `${path}_${counter}`;
+                while (vault.getAbstractFileByPath(newPath)) {
+                        counter++;
+                        newPath = `${path}_${counter}`;
+                }
+                return newPath;
+        }
 }

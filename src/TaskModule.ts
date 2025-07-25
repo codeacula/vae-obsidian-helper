@@ -1,5 +1,5 @@
 import VaePlugin from "main";
-import { TFile, TFolder, normalizePath } from "obsidian";
+import { Notice, TFile, TFolder, normalizePath } from "obsidian";
 import { FileHelper } from "./FileHelper";
 
 export class TaskModule {
@@ -42,70 +42,92 @@ export class TaskModule {
 	}
 
 	// Original API: create a new task note in the specified project's Tasks folder
-	public async createTask(
-		projectName: string,
-		taskName: string
-	): Promise<TFile> {
-		const vault = this.plugin.app.vault;
-		const tasksFolderPath = normalizePath(
-			`${this.projectFolder}/${projectName}/Tasks`
-		);
-		const taskNotePath = normalizePath(`${tasksFolderPath}/${taskName}.md`);
+        public async createTask(
+                projectName: string,
+                taskName: string
+        ): Promise<TFile> {
+                const vault = this.plugin.app.vault;
+                const cleanName = FileHelper.sanitizeName(taskName);
+                const tasksFolderPath = normalizePath(`${this.projectFolder}/${projectName}/Tasks`);
+                let taskNotePath = normalizePath(`${tasksFolderPath}/${cleanName}.md`);
+                taskNotePath = await FileHelper.getUniqueFilePath(vault, taskNotePath);
 
 		// Ensure Tasks folder exists
-		let tasksFolder = vault.getAbstractFileByPath(tasksFolderPath);
-		if (!tasksFolder) {
-			tasksFolder = await vault.createFolder(tasksFolderPath);
-		}
-		if (!(tasksFolder instanceof TFolder)) {
-			throw new Error(
-				`Path exists but is not a folder: ${tasksFolderPath}`
-			);
-		}
+                let tasksFolder = vault.getAbstractFileByPath(tasksFolderPath);
+                if (!tasksFolder) {
+                        try {
+                                tasksFolder = await vault.createFolder(tasksFolderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${tasksFolderPath}`);
+                                throw err;
+                        }
+                }
+                if (!(tasksFolder instanceof TFolder)) {
+                        throw new Error(
+                                `Path exists but is not a folder: ${tasksFolderPath}`
+                        );
+                }
 
 		// Create task note from template
-		let content = `# ${taskName}\n`;
-		if (this.taskTemplate) {
-			const templateFile = vault.getAbstractFileByPath(this.taskTemplate);
-			if (templateFile instanceof TFile) {
-				content = await vault.read(templateFile);
-				content = content.replace(/\{\{name\}\}/g, taskName);
-			}
-		}
-		return vault.create(taskNotePath, content);
-	}
+                let content = `# ${cleanName}\n`;
+                if (this.taskTemplate) {
+                        const templateFile = vault.getAbstractFileByPath(this.taskTemplate);
+                        if (templateFile instanceof TFile) {
+                                content = await vault.read(templateFile);
+                                content = content.replace(/\{\{name\}\}/g, cleanName);
+                        }
+                }
+                try {
+                        return await vault.create(taskNotePath, content);
+                } catch (err) {
+                        new Notice(`Failed to create file ${taskNotePath}`);
+                        throw err;
+                }
+        }
 
 	// Original API: create a new todo note (not associated with a project)
-	public async createTodo(
-		todoName: string,
-		todoFolder = "/My Core/Tasks"
-	): Promise<TFile> {
-		const vault = this.plugin.app.vault;
-		const todoFolderPath = normalizePath(todoFolder);
-		const todoNotePath = normalizePath(`${todoFolderPath}/${todoName}.md`);
+        public async createTodo(
+                todoName: string,
+                todoFolder = "/My Core/Tasks"
+        ): Promise<TFile> {
+                const vault = this.plugin.app.vault;
+                const todoFolderPath = normalizePath(todoFolder);
+                const cleanName = FileHelper.sanitizeName(todoName);
+                let todoNotePath = normalizePath(`${todoFolderPath}/${cleanName}.md`);
+                todoNotePath = await FileHelper.getUniqueFilePath(vault, todoNotePath);
 
 		// Ensure todo folder exists
-		let folder = vault.getAbstractFileByPath(todoFolderPath);
-		if (!folder) {
-			folder = await vault.createFolder(todoFolderPath);
-		}
-		if (!(folder instanceof TFolder)) {
-			throw new Error(
-				`Path exists but is not a folder: ${todoFolderPath}`
-			);
-		}
+                let folder = vault.getAbstractFileByPath(todoFolderPath);
+                if (!folder) {
+                        try {
+                                folder = await vault.createFolder(todoFolderPath);
+                        } catch (err) {
+                                new Notice(`Failed to create folder ${todoFolderPath}`);
+                                throw err;
+                        }
+                }
+                if (!(folder instanceof TFolder)) {
+                        throw new Error(
+                                `Path exists but is not a folder: ${todoFolderPath}`
+                        );
+                }
 
 		// Create todo note from template
-		let content = `# ${todoName}\n`;
-		if (this.todoTemplate) {
-			const templateFile = vault.getAbstractFileByPath(this.todoTemplate);
-			if (templateFile instanceof TFile) {
-				content = await vault.read(templateFile);
-				content = content.replace(/\{\{name\}\}/g, todoName);
-			}
-		}
-		return vault.create(todoNotePath, content);
-	}
+                let content = `# ${cleanName}\n`;
+                if (this.todoTemplate) {
+                        const templateFile = vault.getAbstractFileByPath(this.todoTemplate);
+                        if (templateFile instanceof TFile) {
+                                content = await vault.read(templateFile);
+                                content = content.replace(/\{\{name\}\}/g, cleanName);
+                        }
+                }
+                try {
+                        return await vault.create(todoNotePath, content);
+                } catch (err) {
+                        new Notice(`Failed to create file ${todoNotePath}`);
+                        throw err;
+                }
+        }
 
 	// Example: process the active file as a task note (for command/ribbon)
 	public async processActiveTaskNote() {

@@ -17,16 +17,19 @@ export class InlineSuggest {
 	private callback: (selected: string) => void;
 	private getSuggestions: (query: string) => SuggestionItem[];
 
-	constructor(
-		app: App,
-		inputEl: HTMLInputElement,
-		getSuggestions: (query: string) => SuggestionItem[],
-		callback: (selected: string) => void
-	) {
-		this.app = app;
-		this.inputEl = inputEl;
-		this.getSuggestions = getSuggestions;
-		this.callback = callback;
+        private onScrollRef: () => void;
+        private onResizeRef: () => void;
+
+        constructor(
+                app: App,
+                inputEl: HTMLInputElement,
+                getSuggestions: (query: string) => SuggestionItem[],
+                callback: (selected: string) => void
+        ) {
+                this.app = app;
+                this.inputEl = inputEl;
+                this.getSuggestions = getSuggestions;
+                this.callback = callback;
 
 		this.setupSuggestionsContainer();
 		this.attachEventListeners();
@@ -54,9 +57,11 @@ export class InlineSuggest {
 		this.inputEl.addEventListener("focus", this.onFocus.bind(this));
 
 		// Reposition on scroll
-		window.addEventListener("scroll", this.onScroll.bind(this), true);
-		window.addEventListener("resize", this.onResize.bind(this));
-	}
+                this.onScrollRef = this.onScroll.bind(this);
+                this.onResizeRef = this.onResize.bind(this);
+                window.addEventListener("scroll", this.onScrollRef, true);
+                window.addEventListener("resize", this.onResizeRef);
+        }
 
 	private onScroll() {
 		if (this.isSuggestionsVisible()) {
@@ -228,8 +233,8 @@ export class InlineSuggest {
 
 	destroy() {
 		// Remove event listeners
-		window.removeEventListener("scroll", this.onScroll.bind(this), true);
-		window.removeEventListener("resize", this.onResize.bind(this));
+                window.removeEventListener("scroll", this.onScrollRef, true);
+                window.removeEventListener("resize", this.onResizeRef);
 
 		// Remove from DOM
 		this.suggestionsContainer.remove();
@@ -244,10 +249,10 @@ export function getFolderSuggestions(
 	const folders: SuggestionItem[] = [];
 
 	// Add root folder option if it matches
-	if (
-		"/ (Root)".toLowerCase().contains(query.toLowerCase()) ||
-		query === "/"
-	) {
+        if (
+                "/ (Root)".toLowerCase().includes(query.toLowerCase()) ||
+                query === "/"
+        ) {
 		folders.push({
 			path: "/",
 			name: "/ (Root)",
@@ -261,10 +266,10 @@ export function getFolderSuggestions(
 		.filter((file): file is TFolder => file instanceof TFolder)
 		.forEach((folder) => {
 			const name = folder.name || folder.path;
-			if (
-				name.toLowerCase().contains(query.toLowerCase()) ||
-				folder.path.toLowerCase().contains(query.toLowerCase())
-			) {
+                        if (
+                                name.toLowerCase().includes(query.toLowerCase()) ||
+                                folder.path.toLowerCase().includes(query.toLowerCase())
+                        ) {
 				folders.push({
 					path: folder.path,
 					name: name,
@@ -289,12 +294,12 @@ export function getFileSuggestions(
 	}
 
 	const suggestions = files
-		.filter((file) => {
-			return (
-				file.basename.toLowerCase().contains(query.toLowerCase()) ||
-				file.path.toLowerCase().contains(query.toLowerCase())
-			);
-		})
+                .filter((file) => {
+                        return (
+                                file.basename.toLowerCase().includes(query.toLowerCase()) ||
+                                file.path.toLowerCase().includes(query.toLowerCase())
+                        );
+                })
 		.map(
 			(file): SuggestionItem => ({
 				path: file.path,
@@ -320,9 +325,9 @@ export function getProjectSuggestions(
 
 	return projectsFolder.children
 		.filter((child): child is TFolder => child instanceof TFolder)
-		.filter((folder) => {
-			return folder.name.toLowerCase().contains(query.toLowerCase());
-		})
+                .filter((folder) => {
+                        return folder.name.toLowerCase().includes(query.toLowerCase());
+                })
 		.map(
 			(folder): SuggestionItem => ({
 				path: folder.name, // Return just the name for project selection
