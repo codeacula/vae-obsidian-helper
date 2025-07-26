@@ -13,15 +13,21 @@ export class ChatUtils {
         await FileHelper.createFolderIfNotExists(normalizePath(folder), vault);
 
         if (templater.isAvailable) {
-            const file = await templater.createFromTemplate(
-                content,
-                folder,
-                filename,
-                {},
-                false
-            );
-            if (file) {
-                return file;
+            try {
+                const file = await templater.createFromTemplate(
+                    content,
+                    folder,
+                    filename,
+                    {},
+                    false
+                );
+                if (file) {
+                    return file;
+                } else {
+                    console.error(`Failed to create file from template: Returned file is falsy. Folder: ${folder}, Filename: ${filename}`);
+                }
+            } catch (error) {
+                console.error(`Error while creating file from template. Folder: ${folder}, Filename: ${filename}`, error);
             }
         }
 
