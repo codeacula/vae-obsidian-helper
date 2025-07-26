@@ -11,6 +11,7 @@ This sample plugin demonstrates some of the basic functionality the plugin API c
 - Adds a plugin setting tab to the settings page.
 - Registers a global click event and output 'click' to the console.
 - Registers a global interval which logs 'setInterval' to the console.
+- Includes chat utilities for saving transcripts as notes.
 
 ## First time developing plugins?
 
